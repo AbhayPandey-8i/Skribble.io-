@@ -5,7 +5,7 @@ import DrawingGame from "../components/DrawingGame";
 import Scoreboard from "../components/Scoreboard";
 import GameFinished from "../components/GameFinished";
 
-const SOCKET_URL = "http://localhost:5000";
+const SOCKET_URL = "https://skribble-io-vqa1.onrender.com";
 
 /* ---------- UI-only helpers (no app logic) ---------- */
 
