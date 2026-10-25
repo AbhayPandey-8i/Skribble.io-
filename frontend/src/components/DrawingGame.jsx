@@ -54,6 +54,15 @@ const DrawingGame = ({ socket, isDrawer, secretWord, roundInfo }) => {
   const [hintPattern, setHintPattern] = useState("");
   const [hintsRevealed, setHintsRevealed] = useState(0);
   const [totalHints, setTotalHints] = useState(0);
+  const chatMessagesRef = useRef(null);
+
+  useEffect(() => {
+    const chatContainer = chatMessagesRef.current;
+
+    if (chatContainer) {
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+  }, [messages]);
 
   const canDraw = isDrawer && !choosingWord && !!secretWord && timeLeft > 0;
   const showTimer = roundInfo?.phase === "drawing" && timeLeft > 0;
@@ -707,12 +716,17 @@ const DrawingGame = ({ socket, isDrawer, secretWord, roundInfo }) => {
       </div>
 
       {/* ---------- chat card ---------- */}
-      <div className={`${cardClass} flex min-h-[400px] flex-col p-4 sm:p-5`}>
-        <h2 className="mb-4 text-lg font-extrabold tracking-tight text-indigo-950">
+      <div
+        className={`${cardClass} flex h-[450px] min-h-0 flex-col p-4 sm:p-5 lg:h-[600px]`}
+      >
+        <h2 className="mb-4 shrink-0 text-lg font-extrabold tracking-tight text-indigo-950">
           Guesses & Chat
         </h2>
 
-        <div className="flex-1 space-y-2 overflow-y-auto pr-1">
+        <div
+          ref={chatMessagesRef}
+          className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain pr-1"
+        >
           {messages.map((item, index) => (
             <div
               key={`${index}-${item.username}`}
