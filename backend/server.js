@@ -38,11 +38,11 @@ const io = new Server(server, {
 roomSocket(io);
 gameSocket(io);
 
-app.get("/", (req, res) => {
-  res.status(200).json({
-    message: "Skribble Clone API is running",
-  });
-});
+// app.get("/", (req, res) => {
+//   res.status(200).json({
+//     message: "Skribble Clone API is running",
+//   });
+// });
 
 const PORT = process.env.PORT || 5000;
 
