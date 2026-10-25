@@ -207,7 +207,7 @@ const Home = () => {
   /* ---------- Styling ---------- */
 
   const inputClass =
-    "block h-11 w-full min-w-0 max-w-full box-border rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/15 min-[360px]:h-12 min-[360px]:px-3 sm:px-4 sm:text-[15px]";
+    "block h-11 w-full min-w-0 max-w-full box-border rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/15 min-[360px]:h-12 min-[360px]:px-3 sm:px-3 sm:text-[15px]";
 
   const selectClass = `${inputClass} appearance-none cursor-pointer pr-9`;
 
@@ -375,7 +375,7 @@ const Home = () => {
                 placeholder="Enter your username"
                 maxLength={20}
                 autoComplete="off"
-                className={`${inputClass} pl-12 min-[360px]:pl-12`}
+                className={`${inputClass} !pl-12`}
               />
             </div>
           </div>
