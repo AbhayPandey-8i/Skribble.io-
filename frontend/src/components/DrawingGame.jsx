@@ -40,6 +40,7 @@ const DrawingGame = ({ socket, isDrawer, secretWord, roundInfo }) => {
   const lastPoint = useRef(null);
   const drawingRef = useRef(false);
   const currentStrokeId = useRef(null);
+  const chatMessagesRef = useRef(null);
 
   const [color, setColor] = useState("#111827");
   const [brushSize, setBrushSize] = useState(4);
@@ -54,8 +55,8 @@ const DrawingGame = ({ socket, isDrawer, secretWord, roundInfo }) => {
   const [hintPattern, setHintPattern] = useState("");
   const [hintsRevealed, setHintsRevealed] = useState(0);
   const [totalHints, setTotalHints] = useState(0);
-  const chatMessagesRef = useRef(null);
 
+  // Automatically scroll to the newest chat message.
   useEffect(() => {
     const chatContainer = chatMessagesRef.current;
 
@@ -725,7 +726,7 @@ const DrawingGame = ({ socket, isDrawer, secretWord, roundInfo }) => {
 
         <div
           ref={chatMessagesRef}
-          className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain pr-1"
+          className="min-h-0 flex-1 space-y-2 overflow-y-auto touch-pan-y pr-1"
         >
           {messages.map((item, index) => (
             <div
@@ -757,7 +758,7 @@ const DrawingGame = ({ socket, isDrawer, secretWord, roundInfo }) => {
           )}
         </div>
 
-        <form onSubmit={sendMessage} className="mt-4 flex gap-2">
+        <form onSubmit={sendMessage} className="mt-4 flex shrink-0 gap-2">
           <input
             value={message}
             onChange={(event) => setMessage(event.target.value)}
