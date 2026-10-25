@@ -374,6 +374,55 @@ const sendGameResults = (socket, room) => {
  * Called by roomSocket.js when a player leaves.
  * This is a server-side function, not a client socket event.
  */
+
+/*
+ * Add a newly joined player to an ongoing game.
+ * The current drawing turn and timer are not interrupted.
+ */
+export const handleGamePlayerJoined = async (roomCode, playerId) => {
+  try {
+    const room = await Room.findOne({ roomCode });
+
+    if (!room || room.status !== "playing") {
+      return;
+    }
+
+    const game = gameStates.get(roomCode);
+
+    if (!game) {
+      console.error(
+        `Cannot add player ${playerId}: game state for ${roomCode} is unavailable.`,
+      );
+
+      return;
+    }
+
+    // Prevent duplicate entries in the turn order.
+    if (game.playerIds.includes(playerId)) {
+      return;
+    }
+
+    const player = room.players.find((item) => item.playerId === playerId);
+
+    if (!player || !player.isConnected) {
+      return;
+    }
+
+    if (game.playerIds.length >= room.settings.maxPlayers) {
+      return;
+    }
+
+    // Add the new player at the end of the turn order.
+    game.playerIds.push(playerId);
+
+    console.log(
+      `${player.username} joined the ongoing game in room ${roomCode}.`,
+    );
+  } catch (error) {
+    console.error("Add player to ongoing game error:", error.message);
+  }
+};
+
 export const handleGamePlayerLeft = async (
   io,
   roomCode,

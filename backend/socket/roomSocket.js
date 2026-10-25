@@ -1,5 +1,5 @@
 import Room from "../models/room.js";
-import { handleGamePlayerLeft } from "./gameSocket.js";
+import { handleGamePlayerLeft, handleGamePlayerJoined } from "./gameSocket.js";
 
 const activeSockets = new Map();
 const hostTimers = new Map();
@@ -75,7 +75,6 @@ const scheduleHostTransfer = (io, roomCode, playerId) => {
 
       const player = room.players.find((item) => item.playerId === playerId);
 
-      // The host reconnected before the timeout expired.
       if (!player || player.isConnected || room.hostId !== playerId) {
         return;
       }
@@ -147,6 +146,17 @@ const roomSocket = (io) => {
           return;
         }
 
+        // Players cannot enter a finished game.
+        if (room.status === "finished") {
+          socket.emit("room:error", {
+            message:
+              "This game has finished. Wait for the host to start another game.",
+          });
+
+          return;
+        }
+
+        // The REST API must add new players to the room first.
         const player = room.players.find((item) => item.playerId === playerId);
 
         if (!player) {
@@ -157,7 +167,7 @@ const roomSocket = (io) => {
           return;
         }
 
-        // Leave the previous Socket.IO room if this socket changes rooms.
+        // Leave a previous room if this socket changes rooms.
         if (socket.data.roomCode) {
           socket.leave(socket.data.roomCode);
         }
@@ -165,7 +175,7 @@ const roomSocket = (io) => {
         const socketKey = `${roomCode}:${playerId}`;
         const previousSocketId = activeSockets.get(socketKey);
 
-        // Register the new socket before disconnecting the previous one.
+        // Register the new socket before disconnecting the old socket.
         activeSockets.set(socketKey, socket.id);
 
         if (previousSocketId && previousSocketId !== socket.id) {
@@ -198,6 +208,12 @@ const roomSocket = (io) => {
 
         await socket.join(roomCode);
 
+        // Add new players to the ongoing game's turn order.
+        // Existing players and the current turn remain unchanged.
+        if (room.status === "playing") {
+          await handleGamePlayerJoined(roomCode, playerId);
+        }
+
         socket.emit("room:joined", {
           message: "Joined room successfully.",
           roomCode,
@@ -207,6 +223,7 @@ const roomSocket = (io) => {
           players: getRoomPlayers(room),
           settings: room.settings,
         });
+
         await sendPlayersUpdate(io, roomCode);
       } catch (error) {
         console.error("Socket room join error:", error.message);
@@ -258,7 +275,6 @@ const roomSocket = (io) => {
 
         const leavingPlayer = room.players[playerIndex];
 
-        // Check both host indicators to avoid inconsistent host state.
         const wasHost = room.hostId === playerId || leavingPlayer.isHost;
 
         room.players.splice(playerIndex, 1);
@@ -282,7 +298,6 @@ const roomSocket = (io) => {
           }
         }
 
-        // Clean up the game before deleting an empty room.
         if (room.players.length === 0) {
           await handleGamePlayerLeft(io, roomCode, playerId, true);
 
@@ -306,7 +321,6 @@ const roomSocket = (io) => {
 
         await room.save();
 
-        // Update the game if this player was participating in it.
         await handleGamePlayerLeft(io, roomCode, playerId, false);
 
         io.to(roomCode).emit("room:player-left", {
@@ -362,7 +376,6 @@ const roomSocket = (io) => {
 
         await sendPlayersUpdate(io, roomCode);
 
-        // Give a disconnected host 15 seconds to reconnect.
         if (room.hostId === playerId || player.isHost) {
           scheduleHostTransfer(io, roomCode, playerId);
         }

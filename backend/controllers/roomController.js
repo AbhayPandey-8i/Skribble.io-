@@ -11,6 +11,10 @@ const getRoomByCode = async (roomCode) => {
   });
 };
 
+const escapeRegex = (value) => {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+};
+
 export const createRoom = async (req, res) => {
   try {
     const { username, isPrivate = true, settings = {} } = req.body;
@@ -97,9 +101,10 @@ export const createRoom = async (req, res) => {
     }
 
     const playerId = randomUUID();
+
     let room;
 
-    // Retry in the unlikely event that a room code already exists.
+    // Retry if a generated room code already exists.
     for (let attempt = 0; attempt < 5; attempt++) {
       const roomCode = generateRoomCode();
 
@@ -155,16 +160,25 @@ export const joinRoom = async (req, res) => {
     const { username } = req.body;
 
     if (
+      typeof roomCode !== "string" ||
+      !roomCode.trim() ||
       typeof username !== "string" ||
       !username.trim() ||
       username.trim().length > 20
     ) {
       return res.status(400).json({
-        message: "Username must be between 1 and 20 characters.",
+        message: "A valid room code and username are required.",
       });
     }
 
-    const room = await getRoomByCode(roomCode);
+    const normalizedRoomCode = roomCode.trim().toUpperCase();
+    const normalizedUsername = username.trim();
+    const usernameRegex = new RegExp(
+      `^${escapeRegex(normalizedUsername)}$`,
+      "i",
+    );
+
+    const room = await getRoomByCode(normalizedRoomCode);
 
     if (!room) {
       return res.status(404).json({
@@ -172,9 +186,16 @@ export const joinRoom = async (req, res) => {
       });
     }
 
-    if (room.status !== "waiting") {
+    if (room.status === "finished") {
       return res.status(400).json({
-        message: "This game has already started.",
+        message:
+          "This game has finished. Wait for the host to start another game.",
+      });
+    }
+
+    if (!["waiting", "playing"].includes(room.status)) {
+      return res.status(400).json({
+        message: "This room is currently unavailable.",
       });
     }
 
@@ -184,28 +205,25 @@ export const joinRoom = async (req, res) => {
       });
     }
 
-    const normalizedUsername = username.trim().toLowerCase();
-
-    const playerExists = room.players.some(
-      (player) => player.username.toLowerCase() === normalizedUsername,
-    );
-
-    if (playerExists) {
-      return res.status(409).json({
-        message: "This username is already taken in the room.",
-      });
-    }
-
     const playerId = randomUUID();
 
-    // Atomically add the player only if the room is still waiting
-    // and still has a free slot.
+    /*
+     * Atomically add the player.
+     *
+     * Allow both waiting and playing rooms.
+     * Recheck the room status, player limit, and username
+     * in the database query to reduce race conditions.
+     */
     const updatedRoom = await Room.findOneAndUpdate(
       {
-        roomCode: roomCode.toUpperCase(),
-        status: "waiting",
-        "players.username": {
-          $not: new RegExp(`^${escapeRegex(username.trim())}$`, "i"),
+        roomCode: normalizedRoomCode,
+        status: { $in: ["waiting", "playing"] },
+        players: {
+          $not: {
+            $elemMatch: {
+              username: usernameRegex,
+            },
+          },
         },
         $expr: {
           $lt: [{ $size: "$players" }, "$settings.maxPlayers"],
@@ -215,7 +233,7 @@ export const joinRoom = async (req, res) => {
         $push: {
           players: {
             playerId,
-            username: username.trim(),
+            username: normalizedUsername,
             isHost: false,
             isReady: false,
             isConnected: false,
@@ -230,8 +248,8 @@ export const joinRoom = async (req, res) => {
     );
 
     if (!updatedRoom) {
-      // Refresh the room to return the most useful error.
-      const latestRoom = await getRoomByCode(roomCode);
+      // Check the latest state to provide a useful error.
+      const latestRoom = await getRoomByCode(normalizedRoomCode);
 
       if (!latestRoom) {
         return res.status(404).json({
@@ -239,9 +257,16 @@ export const joinRoom = async (req, res) => {
         });
       }
 
-      if (latestRoom.status !== "waiting") {
+      if (latestRoom.status === "finished") {
         return res.status(400).json({
-          message: "This game has already started.",
+          message:
+            "This game has finished. Wait for the host to start another game.",
+        });
+      }
+
+      if (!["waiting", "playing"].includes(latestRoom.status)) {
+        return res.status(400).json({
+          message: "This room is currently unavailable.",
         });
       }
 
@@ -251,13 +276,27 @@ export const joinRoom = async (req, res) => {
         });
       }
 
-      return res.status(409).json({
-        message: "This username is already taken in the room.",
+      const usernameTaken = latestRoom.players.some(
+        (player) =>
+          player.username.toLowerCase() === normalizedUsername.toLowerCase(),
+      );
+
+      if (usernameTaken) {
+        return res.status(409).json({
+          message: "This username is already taken in the room.",
+        });
+      }
+
+      return res.status(400).json({
+        message: "Unable to join this room. Please try again.",
       });
     }
 
     return res.status(200).json({
-      message: "Joined room successfully.",
+      message:
+        updatedRoom.status === "playing"
+          ? "Joined the ongoing game successfully."
+          : "Joined room successfully.",
       playerId,
       room: updatedRoom,
     });
@@ -270,13 +309,10 @@ export const joinRoom = async (req, res) => {
   }
 };
 
-const escapeRegex = (value) => {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-};
-
 export const getRoomDetails = async (req, res) => {
   try {
     const { roomCode } = req.params;
+
     const room = await getRoomByCode(roomCode);
 
     if (!room) {
@@ -285,7 +321,9 @@ export const getRoomDetails = async (req, res) => {
       });
     }
 
-    return res.status(200).json({ room });
+    return res.status(200).json({
+      room,
+    });
   } catch (error) {
     console.error("Get room error:", error.message);
 
