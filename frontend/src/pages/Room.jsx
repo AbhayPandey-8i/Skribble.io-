@@ -49,6 +49,7 @@ const Room = () => {
   const [secretWord, setSecretWord] = useState("");
   const [gameResult, setGameResult] = useState(null);
   const [isLeaving, setIsLeaving] = useState(false);
+  const [isRestarting, setIsRestarting] = useState(false);
 
   const [gameSettings, setGameSettings] = useState({
     rounds: 3,
@@ -95,12 +96,16 @@ const Room = () => {
         setGameStarted(true);
         setGameResult(null);
       } else if (data.status === "finished") {
+        setGameStarted(true);
         newSocket.emit("game:restore");
       } else {
         setGameStarted(false);
         setGameResult(null);
+        setRoundInfo(null);
+        setSecretWord("");
       }
 
+      // Restore the current game or final results when necessary.
       newSocket.emit("game:restore");
     });
 
@@ -129,11 +134,15 @@ const Room = () => {
 
     newSocket.on("game:error", (data) => {
       setError(data.message);
+      setIsRestarting(false);
     });
 
     newSocket.on("game:started", () => {
       setGameStarted(true);
       setGameResult(null);
+      setRoundInfo(null);
+      setSecretWord("");
+      setIsRestarting(false);
       setError("");
     });
 
@@ -165,6 +174,9 @@ const Room = () => {
     newSocket.on("game:finished", (data) => {
       setGameResult(data);
       setGameStarted(true);
+      setRoundInfo(null);
+      setSecretWord("");
+      setIsRestarting(false);
       setError("");
     });
 
@@ -173,7 +185,9 @@ const Room = () => {
       setRoundInfo(null);
       setSecretWord("");
       setGameResult(null);
-      setError(data.message);
+      setIsReady(false);
+      setIsRestarting(false);
+      setError(data?.message || "The game has returned to the lobby.");
     });
 
     newSocket.on("disconnect", () => {
@@ -186,7 +200,7 @@ const Room = () => {
   }, [roomCode, playerId, username, navigate]);
 
   const currentPlayer = players.find((player) => player.playerId === playerId);
-  const isHost = currentPlayer?.isHost;
+  const isHost = Boolean(currentPlayer?.isHost);
 
   const connectedPlayers = players.filter((player) => player.isConnected);
 
@@ -213,17 +227,38 @@ const Room = () => {
   };
 
   const toggleReady = () => {
-    if (!socket || isLeaving) return;
+    if (!socket || !socket.connected || isLeaving) return;
 
     setError("");
     socket.emit("room:ready", { isReady: !isReady });
   };
 
   const startGame = () => {
-    if (!socket || isLeaving) return;
+    if (!socket || !socket.connected || isLeaving) return;
 
     setError("");
     socket.emit("game:start");
+  };
+
+  const playAgain = () => {
+    if (!socket || !socket.connected) {
+      setError(
+        "You are disconnected. Please wait for the connection to return.",
+      );
+      return;
+    }
+
+    if (!isHost) {
+      setError("Only the host can start another game.");
+      return;
+    }
+
+    if (isRestarting) return;
+
+    setError("");
+    setIsRestarting(true);
+
+    socket.emit("game:play-again");
   };
 
   const copyRoomCode = async () => {
@@ -369,11 +404,46 @@ const Room = () => {
         {/* Finished game */}
 
         {gameResult ? (
-          <GameFinished
-            rankings={gameResult.rankings || []}
-            totalRounds={gameResult.totalRounds || gameSettings.rounds}
-            onBack={leaveRoom}
-          />
+          <div className="skb-rise">
+            <GameFinished
+              rankings={gameResult.rankings || []}
+              totalRounds={gameResult.totalRounds || gameSettings.rounds}
+              onBack={leaveRoom}
+            />
+
+            <div className="mx-auto mt-5 max-w-xl rounded-2xl bg-white p-4 text-center shadow-[0_20px_50px_-30px_rgba(55,48,163,0.6)] sm:mt-6 sm:p-6">
+              {isHost ? (
+                <>
+                  <h2 className="text-lg font-extrabold text-indigo-950 sm:text-xl">
+                    Play another game?
+                  </h2>
+
+                  <p className="mt-2 text-sm leading-relaxed text-slate-500">
+                    Start a new game in this room with the players who are still
+                    here.
+                  </p>
+
+                  <button
+                    onClick={playAgain}
+                    disabled={isRestarting || isLeaving}
+                    className="mt-4 h-12 w-full rounded-xl bg-emerald-600 px-5 text-sm font-bold text-white shadow-[0_10px_24px_-10px_rgba(5,150,105,0.8)] transition hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-300/60 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 sm:text-base"
+                  >
+                    {isRestarting ? "Returning to Lobby..." : "Play Again"}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <h2 className="text-lg font-extrabold text-indigo-950 sm:text-xl">
+                    Game Over!
+                  </h2>
+
+                  <p className="mt-2 text-sm leading-relaxed text-slate-500">
+                    Waiting for the host to start another game.
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
         ) : !gameStarted ? (
           <div className="skb-rise grid min-w-0 grid-cols-1 items-start gap-4 sm:gap-6 lg:grid-cols-[minmax(0,1fr)_300px] xl:grid-cols-[minmax(0,1fr)_320px]">
             {/* Lobby */}
@@ -568,7 +638,8 @@ const Room = () => {
 
                     {startDisabled && !isLeaving && (
                       <p className="mt-3 text-center text-xs leading-relaxed text-indigo-100">
-                        You need at least 2 players, and everyone must be ready.
+                        You need at least 2 connected players, and everyone must
+                        be ready.
                       </p>
                     )}
                   </>

@@ -572,6 +572,7 @@ const gameSocket = (io) => {
       }
     });
 
+    // Update a player's ready status in the lobby.
     socket.on("room:ready", async ({ isReady } = {}) => {
       try {
         const { roomCode, playerId } = socket.data;
@@ -625,6 +626,7 @@ const gameSocket = (io) => {
       }
     });
 
+    // Start a game from the lobby.
     socket.on("game:start", async () => {
       try {
         const { roomCode, playerId } = socket.data;
@@ -724,6 +726,78 @@ const gameSocket = (io) => {
       }
     });
 
+    // Restart the finished game in the same room.
+    socket.on("game:play-again", async () => {
+      try {
+        const { roomCode, playerId } = socket.data;
+
+        if (!roomCode || !playerId) {
+          socket.emit("game:error", {
+            message: "Join a room first.",
+          });
+
+          return;
+        }
+
+        const room = await Room.findOne({ roomCode });
+
+        if (!room) {
+          socket.emit("game:error", {
+            message: "Room not found.",
+          });
+
+          return;
+        }
+
+        if (room.status !== "finished") {
+          socket.emit("game:error", {
+            message: "The current game has not finished.",
+          });
+
+          return;
+        }
+
+        if (room.hostId !== playerId) {
+          socket.emit("game:error", {
+            message: "Only the host can start another game.",
+          });
+
+          return;
+        }
+
+        // Clear all timers and temporary data from the previous game.
+        cleanupGameRoom(roomCode);
+
+        // Reset the room without removing its players or changing its code.
+        room.status = "waiting";
+        room.currentRound = 0;
+        room.currentDrawerId = null;
+
+        room.players.forEach((player) => {
+          player.score = 0;
+          player.isReady = false;
+        });
+
+        await room.save();
+
+        // Tell every player in this room to display the lobby again.
+        io.to(roomCode).emit("game:returned-to-lobby", {
+          message:
+            "A new game is ready! Everyone must mark themselves ready before the host can start.",
+        });
+
+        // Refresh the player list, scores, and ready statuses.
+        sendPlayersUpdate(io, room);
+      } catch (error) {
+        console.error("Play again error:", error.message);
+
+        socket.emit("game:error", {
+          message: "Failed to restart the game. Please try again.",
+        });
+      }
+    });
+
+    // The drawer selects one of the offered words.
     socket.on("word:select", async ({ word } = {}) => {
       try {
         const { roomCode, playerId } = socket.data;
@@ -802,6 +876,7 @@ const gameSocket = (io) => {
       }
     });
 
+    // Send drawing strokes to the other players and save them for restoration.
     socket.on("drawing:stroke", async (stroke) => {
       try {
         const { roomCode, playerId } = socket.data;
@@ -885,6 +960,7 @@ const gameSocket = (io) => {
       }
     });
 
+    // Fill an area on the canvas.
     socket.on("drawing:fill", async (data) => {
       try {
         const { roomCode, playerId } = socket.data;
@@ -947,6 +1023,7 @@ const gameSocket = (io) => {
       }
     });
 
+    // Clear the canvas.
     socket.on("drawing:clear", async () => {
       try {
         const { roomCode, playerId } = socket.data;
@@ -971,6 +1048,7 @@ const gameSocket = (io) => {
       }
     });
 
+    // Undo the last drawing action.
     socket.on("drawing:undo", async () => {
       try {
         const { roomCode, playerId } = socket.data;
@@ -1004,6 +1082,7 @@ const gameSocket = (io) => {
       }
     });
 
+    // Handle chat messages and correct guesses.
     socket.on("chat:send", async ({ message } = {}) => {
       try {
         const { roomCode, playerId } = socket.data;

@@ -5,7 +5,14 @@ const getRankBadgeStyle = (rank) => {
   return "bg-indigo-50 text-indigo-600";
 };
 
-const GameFinished = ({ rankings = [], totalRounds = 1, onBack }) => {
+const GameFinished = ({
+  rankings = [],
+  totalRounds = 1,
+  onBack,
+  onPlayAgain,
+  isHost = false,
+  isRestarting = false,
+}) => {
   const highestScore =
     rankings.length > 0
       ? Math.max(...rankings.map((player) => player.score ?? 0))
@@ -176,11 +183,69 @@ const GameFinished = ({ rankings = [], totalRounds = 1, onBack }) => {
         )}
       </div>
 
-      {/* Return button */}
-      <div className="text-center">
+      {/* Action buttons */}
+      <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
+        {isHost ? (
+          <button
+            onClick={onPlayAgain}
+            disabled={isRestarting}
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-8 text-[15px] font-bold text-white shadow-[0_10px_24px_-10px_rgba(5,150,105,0.8)] transition hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-300/50 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+          >
+            {isRestarting ? (
+              <>
+                <svg
+                  className="h-5 w-5 animate-spin"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="9"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                    className="opacity-25"
+                  />
+                  <path
+                    d="M21 12a9 9 0 0 0-9-9"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                  />
+                </svg>
+                Starting Game...
+              </>
+            ) : (
+              <>
+                <svg
+                  className="h-5 w-5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M20 7v5h-5" />
+                  <path d="M4 17v-5h5" />
+                  <path d="M5.6 9a7 7 0 0 1 11.8-2L20 12" />
+                  <path d="M4 12l2.6 5a7 7 0 0 0 11.8-2" />
+                </svg>
+                Play Again
+              </>
+            )}
+          </button>
+        ) : (
+          <p className="rounded-xl bg-indigo-50 px-5 py-3 text-center text-sm font-semibold text-indigo-700">
+            Waiting for the host to start another game...
+          </p>
+        )}
+
         <button
           onClick={onBack}
-          className="h-12 rounded-xl bg-amber-400 px-10 text-[15px] font-bold text-slate-900 shadow-[0_10px_24px_-10px_rgba(245,158,11,0.9)] transition hover:bg-amber-300 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-300/50 active:scale-[0.99]"
+          className="h-12 w-full rounded-xl bg-amber-400 px-8 text-[15px] font-bold text-slate-900 shadow-[0_10px_24px_-10px_rgba(245,158,11,0.9)] transition hover:bg-amber-300 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-300/50 active:scale-[0.99] sm:w-auto"
         >
           Back to Home
         </button>
