@@ -47,6 +47,7 @@ const Room = () => {
   const [gameStarted, setGameStarted] = useState(false);
   const [roundInfo, setRoundInfo] = useState(null);
   const [secretWord, setSecretWord] = useState("");
+  const [revealedWord, setRevealedWord] = useState("");
   const [gameResult, setGameResult] = useState(null);
   const [isLeaving, setIsLeaving] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
@@ -72,6 +73,8 @@ const Room = () => {
     sessionStorage.setItem("username", username);
 
     const newSocket = io(SOCKET_URL);
+
+    let revealTimeout;
 
     setSocket(newSocket);
 
@@ -103,6 +106,7 @@ const Room = () => {
         setGameResult(null);
         setRoundInfo(null);
         setSecretWord("");
+        setRevealedWord("");
       }
 
       // Restore the current game or final results when necessary.
@@ -138,10 +142,13 @@ const Room = () => {
     });
 
     newSocket.on("game:started", () => {
+      clearTimeout(revealTimeout);
+
       setGameStarted(true);
       setGameResult(null);
       setRoundInfo(null);
       setSecretWord("");
+      setRevealedWord("");
       setIsRestarting(false);
       setError("");
     });
@@ -151,6 +158,10 @@ const Room = () => {
       setRoundInfo(data);
       setSecretWord("");
       setError("");
+
+      // Do not clear revealedWord here.
+      // The previous turn's word should remain visible briefly,
+      // even if the next turn starts immediately.
 
       if (data.totalRounds != null) {
         setGameSettings((previous) => ({
@@ -171,19 +182,39 @@ const Room = () => {
       setSecretWord(data.word);
     });
 
+    // Reveal the word to every player when a turn ends.
+    newSocket.on("turn:ended", (data) => {
+      if (!data?.word) return;
+
+      clearTimeout(revealTimeout);
+
+      setRevealedWord(data.word);
+
+      // Keep the revealed word visible for 4 seconds.
+      revealTimeout = setTimeout(() => {
+        setRevealedWord("");
+      }, 4000);
+    });
+
     newSocket.on("game:finished", (data) => {
+      clearTimeout(revealTimeout);
+
       setGameResult(data);
       setGameStarted(true);
       setRoundInfo(null);
       setSecretWord("");
+      setRevealedWord("");
       setIsRestarting(false);
       setError("");
     });
 
     newSocket.on("game:returned-to-lobby", (data) => {
+      clearTimeout(revealTimeout);
+
       setGameStarted(false);
       setRoundInfo(null);
       setSecretWord("");
+      setRevealedWord("");
       setGameResult(null);
       setIsReady(false);
       setIsRestarting(false);
@@ -195,6 +226,7 @@ const Room = () => {
     });
 
     return () => {
+      clearTimeout(revealTimeout);
       newSocket.disconnect();
     };
   }, [roomCode, playerId, username, navigate]);
@@ -655,6 +687,20 @@ const Room = () => {
           /* Active game */
 
           <div className="grid min-w-0 grid-cols-1 items-start gap-4 sm:gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+            {/* Revealed word banner */}
+
+            {revealedWord && (
+              <div className="col-span-full rounded-2xl border border-amber-300 bg-amber-100 px-4 py-4 text-center shadow-sm">
+                <p className="text-sm font-semibold text-amber-800 sm:text-base">
+                  🎨 Turn ended!
+                </p>
+
+                <p className="mt-1 text-lg font-extrabold text-amber-950 sm:text-xl">
+                  The word was: {revealedWord}
+                </p>
+              </div>
+            )}
+
             <div className="min-w-0 max-w-full">
               <DrawingGame
                 socket={socket}
